@@ -3,12 +3,11 @@ from aiogram.filters import Command,StateFilter
 from aiogram.types import Message
 from keyboards import main_kb, del_kb
 from dictionary import dict_ru
-from aiogram_calendar import SimpleCalendar,SimpleCalendarCallback,get_user_locale
+from aiogram_calendar import SimpleCalendar,SimpleCalendarCallback 
 from aiogram.types import CallbackQuery
 from aiogram.fsm.state import default_state, State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.filters.callback_data import CallbackData
-
 
 rt = Router()
 
@@ -18,6 +17,10 @@ tasks = {}
 class FSM_calendar(StatesGroup):
     select_date = State()
     write_task = State()
+    select_date_for_del = State()
+    select_task = State()
+
+
 
 
 
@@ -56,8 +59,8 @@ async def process_button_write_task(msg: Message, state: FSMContext):
 
 
 @rt.callback_query(SimpleCalendarCallback.filter(),StateFilter(FSM_calendar.select_date))
-async def process_simple_calendar(callback_query: CallbackQuery, callback_data: CallbackData,state: FSMContext):
-    selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
+async def process_simple_calendar(callback_query: CallbackQuery,callback_data: CallbackData, state: FSMContext):
+    selected, date = await SimpleCalendar().process_selection(callback_query,callback_data)
     if selected:
            
         await state.update_data(sel_date = f'{date.strftime("%d.%m.%Y")}')
@@ -68,7 +71,7 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
 
 @rt.message(StateFilter(FSM_calendar.select_date))
 async def not_select(msg:Message):
-    await msg.answer(text = 'Выберите дату для установки задачи. Для прерывания выбора напишите /cancel',reply_markup=await SimpleCalendar().start_calendar())
+    await msg.answer(text = 'Выберите дату для установки/удаления задачи. Для прерывания выбора напишите /cancel',reply_markup=await SimpleCalendar().start_calendar())
 
 
 @rt.message(StateFilter(FSM_calendar.write_task))
@@ -99,15 +102,56 @@ async def back_button(msg:Message):
                             '3. Открыть календарь',reply_markup=main_kb)
 
 
-@rt.message(F.text == '❌')
-async def delete_task(msg:Message):
+@rt.message((F.text == '❌'),StateFilter(default_state))
+async def delete_task(msg:Message,state:FSMContext):
     await msg.answer(text = 'Какую задачу вы хотите удалить?\n'
-                            'Отправьте цифру/число')
+                            'Выберите дату',reply_markup = await SimpleCalendar().start_calendar())
+    await state.set_state(FSM_calendar.select_date_for_del)
     
+
+@rt.callback_query(SimpleCalendarCallback.filter(),StateFilter(FSM_calendar.select_date_for_del))
+async def select_date_for_delete(callback_query: CallbackQuery,callback_data: CallbackData, state: FSMContext):
+    selected, date = await SimpleCalendar().process_selection(callback_query,callback_data)
+    if selected:
+        if date.strftime("%d.%m.%Y") in tasks[callback_query.from_user.id]:
+                await state.update_data(select_date = f'{date.strftime("%d.%m.%Y")}')
+                await callback_query.message.answer(text = f'Дата {date} выбрана. Введите номер задачи для удаления')
+                await state.set_state(FSM_calendar.select_task)
+        else:
+            await callback_query.message.answer('На эту дату заметок нет.\nПопробуйте снова.', reply_markup = await SimpleCalendar().start_calendar())
+
+
+
+
+@rt.message(F.text.isdigit(),StateFilter(FSM_calendar.select_task))
+async def select_task_for_delete(msg:Message,state:FSMContext):
+    data = await state.get_data()
+    date = data['select_date']
+
+    # for date, tasks_list in tasks[msg.from_user.id].items():
+    #     for task in tasks_list:
+    #         if msg.text in task:
+    del tasks[msg.from_user.id][date][(int(msg.text)-1)]
+    if len(tasks[msg.from_user.id][date])==0:
+        del tasks[msg.from_user.id][date]
+    await msg.answer('Задача удалена.')
+    await state.clear()
+    await msg.answer(text = 'Для просмотра активных задач нажмите на кнопку "👀"\n'
+                     '1. Записать новую задачу\n'
+                     '2. Просмотр активных задач\n'
+                     '3. Открыть календарь', reply_markup = main_kb)
+
+
+@rt.message(F.text,StateFilter(FSM_calendar.select_task))
+async def not_select_number(msg:Message):
+    await msg.answer(text = 'Введите номер задачи для удаления. Для прерывания выбора напишите /cancel')
+
+
 
 @rt.message(F.text == '👀')
 async def open_task(msg:Message):
-    if msg.from_user.id not in tasks:
+        
+    if msg.from_user.id not in tasks or len(tasks[msg.from_user.id])<1:
         await msg.answer(text = 'У вас пока нет активных задач')
     else:
         response = "Ваши задачи:\n"
