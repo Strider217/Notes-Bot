@@ -9,6 +9,7 @@ from aiogram.fsm.state import default_state, State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.filters.callback_data import CallbackData
 
+
 rt = Router()
 
 tasks = {}
@@ -28,7 +29,7 @@ class FSM_calendar(StatesGroup):
 async def start_command(msg: Message):
     await msg.answer(text=f'Привет, {msg.chat.first_name}.\n'
                      'Этот бот предназначет для людей, которые'
-                     'не хотят ебланить. Для более подробной'
+                     'не хотят лениться. Для более подробной'
                      'информации напишите /help \n\n'
                      '1. Записать новую задачу\n'
                      '2. Просмотр активных задач\n'
@@ -127,10 +128,6 @@ async def select_date_for_delete(callback_query: CallbackQuery,callback_data: Ca
 async def select_task_for_delete(msg:Message,state:FSMContext):
     data = await state.get_data()
     date = data['select_date']
-
-    # for date, tasks_list in tasks[msg.from_user.id].items():
-    #     for task in tasks_list:
-    #         if msg.text in task:
     del tasks[msg.from_user.id][date][(int(msg.text)-1)]
     if len(tasks[msg.from_user.id][date])==0:
         del tasks[msg.from_user.id][date]
