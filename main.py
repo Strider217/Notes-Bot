@@ -8,7 +8,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
 
 
-redis = Redis(host='localhost')
+redis = Redis(host='redis', port=6379)
 storage = RedisStorage(redis=redis)
 
 logger = logging.getLogger(__name__)
